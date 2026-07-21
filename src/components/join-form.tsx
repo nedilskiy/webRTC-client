@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState } from 'react';
 
 export interface JoinFormProps {
   onSubmit: (nick: string) => void;
 }
 
 export function JoinForm({ onSubmit }: JoinFormProps) {
-  const [nickDraft, setNickDraft] = useState("");
+  const [nickDraft, setNickDraft] = useState('');
 
   const handleSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -26,7 +26,7 @@ export function JoinForm({ onSubmit }: JoinFormProps) {
         </h1>
         <input
           value={nickDraft}
-          onChange={(event) => setNickDraft(event.target.value)}
+          onChange={event => setNickDraft(event.target.value)}
           placeholder="Ваш никнейм"
           className="rounded-lg bg-neutral-700 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500"
         />

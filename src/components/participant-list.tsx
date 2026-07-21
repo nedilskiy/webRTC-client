@@ -1,4 +1,4 @@
-import { Participant } from "@shared/room-connection";
+import type { Participant } from '@shared/room-connection';
 
 export interface ParticipantListProps {
   participants: Participant[];
@@ -11,13 +11,13 @@ export function ParticipantList({
 }: ParticipantListProps) {
   return (
     <ul className="flex flex-col gap-2">
-      {participants.map((participant) => (
+      {participants.map(participant => (
         <li
           key={participant.id}
           className="rounded-lg bg-neutral-800 px-3 py-2 text-white"
         >
-          {participant.nick} {participant.isHost ? "👑" : ""}{" "}
-          {participant.id === userId ? "(вы)" : ""}
+          {participant.nick} {participant.isHost ? '👑' : ''}{' '}
+          {participant.id === userId ? '(вы)' : ''}
         </li>
       ))}
     </ul>

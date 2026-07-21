@@ -1,5 +1,5 @@
-import { ChatMessage } from "@shared/room-connection";
-import { useState } from "react";
+import type { ChatMessage } from '@shared/room-connection';
+import { useState } from 'react';
 
 export interface ChatPanelProps {
   messages: ChatMessage[];
@@ -7,7 +7,7 @@ export interface ChatPanelProps {
 }
 
 export function ChatPanel({ messages, onSend }: ChatPanelProps) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState('');
 
   const handleSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -16,7 +16,7 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
     }
 
     onSend(text);
-    setText("");
+    setText('');
   };
 
   return (
@@ -35,7 +35,7 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
       <form onSubmit={handleSubmit} className="mt-2 flex gap-2">
         <input
           value={text}
-          onChange={(event) => setText(event.target.value)}
+          onChange={event => setText(event.target.value)}
           placeholder="Message..."
           className="flex-1 rounded-lg bg-neutral-700 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
         />

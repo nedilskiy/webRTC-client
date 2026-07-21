@@ -1,14 +1,21 @@
-import { colorForSeed } from "@/lib/color-for-seed";
-import { Participant } from "@shared/room-connection";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef } from 'react';
+
+import { colorForSeed } from '@/lib/color-for-seed';
+import type { Participant } from '@shared/room-connection';
 
 export interface VideoTileProps {
   participant: Participant;
   stream: MediaStream | null;
   muted?: boolean;
+  isScreenShare?: boolean;
 }
 
-export function VideoTile({ participant, stream, muted }: VideoTileProps) {
+export function VideoTile({
+  participant,
+  stream,
+  muted,
+  isScreenShare,
+}: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -17,7 +24,9 @@ export function VideoTile({ participant, stream, muted }: VideoTileProps) {
     }
   }, [stream]);
 
-  const hasVideo = participant.camOn && stream !== null;
+  const hasVideo = isScreenShare
+    ? stream !== null
+    : participant.camOn && stream !== null;
 
   return (
     <div className="relative aspect-video w-full overflow-hidden rounded-lg bg-neutral-800">
@@ -27,7 +36,7 @@ export function VideoTile({ participant, stream, muted }: VideoTileProps) {
         autoPlay
         muted={muted}
         playsInline
-        className={`h-full w-full object-cover ${hasVideo ? "" : "hidden"}`}
+        className={`h-full w-full object-cover ${hasVideo ? '' : 'hidden'}`}
       />
       {!hasVideo && (
         <div
@@ -39,8 +48,9 @@ export function VideoTile({ participant, stream, muted }: VideoTileProps) {
         </div>
       )}
       <span className="absolute bottom-1 left-1 rounded bg-black/60 px-2 py-0.5 text-xs text-white">
-        {participant.isHost ? "👑 " : ""}
+        {participant.isHost ? '👑 ' : ''}
         {participant.nick}
+        {isScreenShare ? ' — экран' : ''}
       </span>
     </div>
   );
