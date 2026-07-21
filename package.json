@@ -1,0 +1,31 @@
+{
+  "name": ".",
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "modern dev",
+    "build": "modern build",
+    "serve": "modern serve",
+    "lint": "biome check"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modern-js/runtime": "3.7.0",
+    "mediasoup-client": "^3.21.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.0",
+    "socket.io-client": "^4.8.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "@modern-js/app-tools": "3.7.0",
+    "@modern-js/tsconfig": "3.7.0",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^20",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "tailwindcss": "^4.3.3",
+    "typescript": "~5.7.3"
+  }
+}
