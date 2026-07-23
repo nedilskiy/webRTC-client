@@ -1,4 +1,5 @@
 import type { ChatMessage } from '@shared/room-connection';
+import { Send } from 'lucide-react';
 import { useState } from 'react';
 
 export interface ChatPanelProps {
@@ -21,7 +22,7 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 space-y-2 overflow-y-auto">
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
         {messages.map((message, index) => (
           <div
             key={`${message.userId}-${message.ts}-${index}`}
@@ -41,9 +42,9 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
         />
         <button
           type="submit"
-          className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500"
+          className="flex items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500"
         >
-          Send
+          <Send size={16} />
         </button>
       </form>
     </div>

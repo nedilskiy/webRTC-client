@@ -1,4 +1,5 @@
 import { useAutoHide } from '@/hooks/use-auto-hide';
+import { PanelRightOpen } from 'lucide-react';
 
 export interface OpenPanelButtonProps {
   onClick: () => void;
@@ -15,7 +16,7 @@ export function OpenPanelButton({ onClick }: OpenPanelButtonProps) {
         visible ? 'opacity-100' : 'pointer-events-none opacity-0'
       }`}
     >
-      💬
+      <PanelRightOpen size={18} />
     </button>
   );
 }

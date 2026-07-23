@@ -3,7 +3,6 @@ const PALETTE = [
   'bg-orange-500',
   'bg-amber-500',
   'bg-lime-500',
-  'bg-emerald-500',
   'bg-teal-500',
   'bg-cyan-500',
   'bg-sky-500',

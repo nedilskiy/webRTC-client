@@ -12,7 +12,9 @@ const initialState: RoomConnectionState = {
   localStream: null,
   localScreenStream: null,
   remoteStreams: {},
+  pendingScreenShares: {},
   chatMessages: [],
+  wasKicked: false,
 };
 
 export interface UseRoomConnectionResult extends RoomConnectionState {
@@ -20,6 +22,10 @@ export interface UseRoomConnectionResult extends RoomConnectionState {
   toggleMic: (enabled: boolean) => void;
   toggleCamera: (enabled: boolean) => void;
   toggleScreenShare: () => void;
+  watchScreenShare: (userId: string) => void;
+  stopWatchingScreenShare: (userId: string) => void;
+  muteParticipant: (targetUserId: string, forceMuted: boolean) => void;
+  kickParticipant: (targetUserId: string) => void;
   leave: () => void;
 }
 
@@ -69,6 +75,29 @@ export function useRoomConnection(
       );
   }, []);
 
+  const watchScreenShare = useCallback((userId: string) => {
+    connectionRef.current
+      ?.watchScreenShare(userId)
+      .catch(error =>
+        console.error('[use-room-connection] watchScreenShare failed:', error),
+      );
+  }, []);
+
+  const stopWatchingScreenShare = useCallback((userId: string) => {
+    connectionRef.current?.stopWatchingScreenShare(userId);
+  }, []);
+
+  const muteParticipant = useCallback(
+    (targetUserId: string, forceMuted: boolean) => {
+      connectionRef.current?.muteParticipant(targetUserId, forceMuted);
+    },
+    [],
+  );
+
+  const kickParticipant = useCallback((targetUserId: string) => {
+    connectionRef.current?.kickParticipant(targetUserId);
+  }, []);
+
   const leave = useCallback(() => {
     connectionRef.current?.destroy();
   }, []);
@@ -79,6 +108,10 @@ export function useRoomConnection(
     toggleMic,
     toggleCamera,
     toggleScreenShare,
+    watchScreenShare,
+    stopWatchingScreenShare,
+    muteParticipant,
+    kickParticipant,
     leave,
   };
 }

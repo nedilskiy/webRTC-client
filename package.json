@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@modern-js/runtime": "3.7.0",
+    "lucide-react": "^1.25.0",
     "mediasoup-client": "^3.21.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.0",

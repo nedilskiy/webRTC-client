@@ -31,6 +31,10 @@ export interface RemoteParticipantStreams {
   screen: MediaStream | null;
 }
 
+export interface PendingScreenShare {
+  userId: string;
+}
+
 export interface RoomConnectionState {
   userId: string | null;
   isHost: boolean;
@@ -38,7 +42,9 @@ export interface RoomConnectionState {
   localStream: MediaStream | null;
   localScreenStream: MediaStream | null;
   remoteStreams: Record<string, RemoteParticipantStreams>;
+  pendingScreenShares: Record<string, PendingScreenShare>;
   chatMessages: ChatMessage[];
+  wasKicked: boolean;
 }
 
 export interface RoomConnectionOptions {
@@ -53,7 +59,7 @@ type ProducerSource = 'camera' | 'screen';
 interface ProducerInfo {
   producerId: string;
   userId: string;
-  kind: string;
+  kind: 'audio' | 'video';
   source: ProducerSource;
 }
 
@@ -63,6 +69,11 @@ interface ProducerClosedInfo {
   source: ProducerSource;
 }
 
+interface ScreenProducerIds {
+  video?: string;
+  audio?: string;
+}
+
 const initialState: RoomConnectionState = {
   userId: null,
   isHost: false,
@@ -70,7 +81,9 @@ const initialState: RoomConnectionState = {
   localStream: null,
   localScreenStream: null,
   remoteStreams: {},
+  pendingScreenShares: {},
   chatMessages: [],
+  wasKicked: false,
 };
 
 export class RoomConnection {
@@ -86,7 +99,15 @@ export class RoomConnection {
   private cameraTrack: MediaStreamTrack | null = null;
   private cameraVideoProducer: Producer | null = null;
   private screenVideoProducer: Producer | null = null;
+  private screenAudioProducer: Producer | null = null;
   private screenTrack: MediaStreamTrack | null = null;
+  private screenAudioTrack: MediaStreamTrack | null = null;
+
+  // userId -> { video?, audio? } producerId чужого шаринга — известно, как только
+  // появился хотя бы один из треков, независимо от того, смотрим мы его или нет.
+  private readonly screenProducersByUser = new Map<string, ScreenProducerIds>();
+  // userId -> consumerId[] — есть запись только пока реально смотрим этот стрим.
+  private readonly screenConsumerIdsByUser = new Map<string, string[]>();
 
   public constructor(private readonly options: RoomConnectionOptions) {
     this.socket = io(options.serverUrl);
@@ -111,6 +132,14 @@ export class RoomConnection {
     this.socket.emit('toggle-camera', { camOn: enabled });
   }
 
+  public muteParticipant(targetUserId: string, forceMuted: boolean): void {
+    this.socket.emit('mute-participant', { targetUserId, forceMuted });
+  }
+
+  public kickParticipant(targetUserId: string): void {
+    this.socket.emit('kick-participant', { targetUserId });
+  }
+
   public async toggleScreenShare(): Promise<void> {
     if (this.screenVideoProducer) {
       await this.stopScreenShare();
@@ -119,10 +148,80 @@ export class RoomConnection {
     }
   }
 
+  public async watchScreenShare(userId: string): Promise<void> {
+    const producers = this.screenProducersByUser.get(userId);
+    if (!producers || !this.device || !this.recvTransport) {
+      return;
+    }
+
+    const producerIds = [producers.video, producers.audio].filter(
+      (id): id is string => Boolean(id),
+    );
+    const consumerIds: string[] = [];
+    let screenStream: MediaStream | null = null;
+
+    for (const producerId of producerIds) {
+      const consumerParams = await this.emitWithAck<ConsumerOptions>(
+        'media:consume',
+        {
+          transportId: this.recvTransport.id,
+          producerId,
+          rtpCapabilities: this.device.rtpCapabilities,
+        },
+      );
+      const consumer = await this.recvTransport.consume(consumerParams);
+      this.socket.emit('media:resume-consumer', { consumerId: consumer.id });
+      consumerIds.push(consumer.id);
+
+      screenStream ??= new MediaStream();
+      screenStream.addTrack(consumer.track);
+    }
+
+    this.screenConsumerIdsByUser.set(userId, consumerIds);
+
+    const existing = this.state.remoteStreams[userId] ?? {
+      camera: new MediaStream(),
+      screen: null,
+    };
+    const { [userId]: _removed, ...restPending } =
+      this.state.pendingScreenShares;
+
+    this.setState({
+      remoteStreams: {
+        ...this.state.remoteStreams,
+        [userId]: { ...existing, screen: screenStream },
+      },
+      pendingScreenShares: restPending,
+    });
+  }
+
+  public stopWatchingScreenShare(userId: string): void {
+    const consumerIds = this.screenConsumerIdsByUser.get(userId);
+    if (consumerIds) {
+      for (const consumerId of consumerIds) {
+        this.socket.emit('media:close-consumer', { consumerId });
+      }
+      this.screenConsumerIdsByUser.delete(userId);
+    }
+
+    const existing = this.state.remoteStreams[userId];
+    const remoteStreams = existing
+      ? { ...this.state.remoteStreams, [userId]: { ...existing, screen: null } }
+      : this.state.remoteStreams;
+
+    const hasProducers = this.screenProducersByUser.has(userId);
+    const pendingScreenShares = hasProducers
+      ? { ...this.state.pendingScreenShares, [userId]: { userId } }
+      : this.state.pendingScreenShares;
+
+    this.setState({ remoteStreams, pendingScreenShares });
+  }
+
   public destroy(): void {
     this.micTrack?.stop();
     this.cameraTrack?.stop();
     this.screenTrack?.stop();
+    this.screenAudioTrack?.stop();
     this.socket.disconnect();
   }
 
@@ -133,19 +232,32 @@ export class RoomConnection {
 
     const screenStream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
+      audio: true,
     });
-    const screenTrack = screenStream.getVideoTracks()[0];
-    this.screenTrack = screenTrack;
+    const screenVideoTrack = screenStream.getVideoTracks()[0];
+    const screenAudioTrack = screenStream.getAudioTracks()[0] ?? null;
+    this.screenTrack = screenVideoTrack;
+    this.screenAudioTrack = screenAudioTrack;
 
     this.screenVideoProducer = await this.sendTransport.produce({
-      track: screenTrack,
+      track: screenVideoTrack,
       appData: { source: 'screen' satisfies ProducerSource },
     });
 
-    this.setState({ localScreenStream: new MediaStream([screenTrack]) });
+    if (screenAudioTrack) {
+      this.screenAudioProducer = await this.sendTransport.produce({
+        track: screenAudioTrack,
+        appData: { source: 'screen' satisfies ProducerSource },
+      });
+    }
+
+    const previewTracks = screenAudioTrack
+      ? [screenVideoTrack, screenAudioTrack]
+      : [screenVideoTrack];
+    this.setState({ localScreenStream: new MediaStream(previewTracks) });
     this.socket.emit('toggle-screen-share', { screenOn: true });
 
-    screenTrack.onended = () => {
+    screenVideoTrack.onended = () => {
       this.stopScreenShare().catch(error =>
         console.error('[room-connection] stopScreenShare failed:', error),
       );
@@ -163,8 +275,18 @@ export class RoomConnection {
     this.screenVideoProducer.close();
     this.screenVideoProducer = null;
 
+    if (this.screenAudioProducer) {
+      this.socket.emit('media:close-producer', {
+        producerId: this.screenAudioProducer.id,
+      });
+      this.screenAudioProducer.close();
+      this.screenAudioProducer = null;
+    }
+
     this.screenTrack?.stop();
     this.screenTrack = null;
+    this.screenAudioTrack?.stop();
+    this.screenAudioTrack = null;
 
     this.setState({ localScreenStream: null });
     this.socket.emit('toggle-screen-share', { screenOn: false });
@@ -205,22 +327,50 @@ export class RoomConnection {
     this.socket.on('media:producer-closed', (info: ProducerClosedInfo) => {
       this.handleProducerClosed(info);
     });
+
+    this.socket.on('kicked', () => {
+      this.setState({ wasKicked: true });
+    });
   }
 
   private handleProducerClosed(info: ProducerClosedInfo): void {
     if (info.source !== 'screen') {
       return;
     }
-    const existing = this.state.remoteStreams[info.userId];
-    if (!existing) {
+
+    const entry = this.screenProducersByUser.get(info.userId);
+    if (entry) {
+      if (entry.video === info.producerId) {
+        entry.video = undefined;
+      }
+      if (entry.audio === info.producerId) {
+        entry.audio = undefined;
+      }
+      if (!entry.video && !entry.audio) {
+        this.screenProducersByUser.delete(info.userId);
+      }
+    }
+
+    if (this.screenProducersByUser.has(info.userId)) {
+      // одна из двух дорожек шаринга (например, звук) закрылась, но видео ещё живо —
+      // ничего не скрываем, ждём полного закрытия.
       return;
     }
-    this.setState({
-      remoteStreams: {
-        ...this.state.remoteStreams,
-        [info.userId]: { ...existing, screen: null },
-      },
-    });
+
+    this.screenConsumerIdsByUser.delete(info.userId);
+
+    const existing = this.state.remoteStreams[info.userId];
+    const remoteStreams = existing
+      ? {
+          ...this.state.remoteStreams,
+          [info.userId]: { ...existing, screen: null },
+        }
+      : this.state.remoteStreams;
+
+    const { [info.userId]: _removed, ...pendingScreenShares } =
+      this.state.pendingScreenShares;
+
+    this.setState({ remoteStreams, pendingScreenShares });
   }
 
   private async getLocalStream(): Promise<MediaStream> {
@@ -268,6 +418,9 @@ export class RoomConnection {
 
     this.micTrack = stream.getAudioTracks()[0] ?? null;
     this.cameraTrack = stream.getVideoTracks()[0] ?? null;
+    if (this.cameraTrack) {
+      this.cameraTrack.enabled = false;
+    }
     this.setState({ localStream: stream });
 
     const rtpCapabilities = await this.emitWithAck<RtpCapabilities>(
@@ -345,7 +498,7 @@ export class RoomConnection {
     // Подписка на новых продюсеров — ДО запроса уже существующих, чтобы не пропустить
     // событие, если кто-то начнёт продюсить ровно в этот момент.
     this.socket.on('media:new-producer', (info: ProducerInfo) => {
-      this.consumeProducer(info).catch(error =>
+      this.handleNewProducer(info).catch(error =>
         console.error('[room-connection] consume failed:', error),
       );
     });
@@ -354,8 +507,33 @@ export class RoomConnection {
       await this.emitWithAck<ProducerInfo[]>('media:get-producer');
 
     for (const info of existingProducers) {
-      await this.consumeProducer(info);
+      await this.handleNewProducer(info);
     }
+  }
+
+  private async handleNewProducer(info: ProducerInfo): Promise<void> {
+    if (info.source === 'screen') {
+      // Экран (и его звук) не подключаем автоматически — только запоминаем,
+      // что он есть. Подключение (consume) происходит по явному запросу
+      // через watchScreenShare.
+      const entry = this.screenProducersByUser.get(info.userId) ?? {};
+      if (info.kind === 'video') {
+        entry.video = info.producerId;
+      } else {
+        entry.audio = info.producerId;
+      }
+      this.screenProducersByUser.set(info.userId, entry);
+
+      this.setState({
+        pendingScreenShares: {
+          ...this.state.pendingScreenShares,
+          [info.userId]: { userId: info.userId },
+        },
+      });
+      return;
+    }
+
+    await this.consumeProducer(info);
   }
 
   private async consumeProducer(info: ProducerInfo): Promise<void> {
@@ -378,18 +556,6 @@ export class RoomConnection {
     const existing: RemoteParticipantStreams = this.state.remoteStreams[
       info.userId
     ] ?? { camera: new MediaStream(), screen: null };
-
-    if (info.source === 'screen') {
-      const screenStream = existing.screen ?? new MediaStream();
-      screenStream.addTrack(consumer.track);
-      this.setState({
-        remoteStreams: {
-          ...this.state.remoteStreams,
-          [info.userId]: { ...existing, screen: screenStream },
-        },
-      });
-      return;
-    }
 
     existing.camera.addTrack(consumer.track);
     this.setState({
