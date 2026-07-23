@@ -21,32 +21,44 @@ export function ChatPanel({ messages, onSend }: ChatPanelProps) {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full min-w-0 flex-col">
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
         {messages.map((message, index) => (
           <div
             key={`${message.userId}-${message.ts}-${index}`}
-            className="rounded bg-neutral-800 px-2 py-1 text-sm"
+            className="animate-[message-fade-in_0.25s_ease-out] rounded bg-neutral-800 px-2 py-1 text-sm"
           >
-            <span className="font-semibold">{message.nick}: </span>
-            <span>{message.text}</span>
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-semibold">{message.nick}</span>
+              <span className="shrink-0 text-[10px] text-neutral-400">
+                {formatTime(message.ts)}
+              </span>
+            </div>
+            <span className="break-words">{message.text}</span>
           </div>
         ))}
       </div>
-      <form onSubmit={handleSubmit} className="mt-2 flex gap-2">
+      <form onSubmit={handleSubmit} className="mt-2 flex min-w-0 gap-2">
         <input
           value={text}
           onChange={event => setText(event.target.value)}
           placeholder="Message..."
-          className="flex-1 rounded-lg bg-neutral-700 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
+          className="min-w-0 flex-1 rounded-lg bg-neutral-700 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-blue-500"
         />
         <button
           type="submit"
-          className="flex items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500"
+          className="flex shrink-0 items-center justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500"
         >
           <Send size={16} />
         </button>
       </form>
     </div>
   );
+}
+
+function formatTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }

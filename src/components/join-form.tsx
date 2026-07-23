@@ -1,18 +1,23 @@
 import { useState } from 'react';
 
+import { DeviceFields, type JoinDevices } from '@/components/device-fields';
+
+export type { JoinDevices };
+
 export interface JoinFormProps {
-  onSubmit: (nick: string) => void;
+  onSubmit: (nick: string, devices: JoinDevices) => void;
 }
 
 export function JoinForm({ onSubmit }: JoinFormProps) {
   const [nickDraft, setNickDraft] = useState('');
+  const [devices, setDevices] = useState<JoinDevices>({});
 
   const handleSubmit = (event: React.SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!nickDraft.trim()) {
       return;
     }
-    onSubmit(nickDraft);
+    onSubmit(nickDraft, devices);
   };
 
   return (
@@ -30,6 +35,9 @@ export function JoinForm({ onSubmit }: JoinFormProps) {
           placeholder="Ваш никнейм"
           className="rounded-lg bg-neutral-700 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500"
         />
+
+        <DeviceFields value={devices} onChange={setDevices} />
+
         <button
           type="submit"
           className="rounded-lg bg-blue-600 px-3 py-2 font-medium text-white hover:bg-blue-500"

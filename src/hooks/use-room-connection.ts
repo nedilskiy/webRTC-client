@@ -29,13 +29,20 @@ export interface UseRoomConnectionResult extends RoomConnectionState {
   leave: () => void;
 }
 
+export interface RoomConnectionDevices {
+  audioDeviceId?: string;
+  videoDeviceId?: string;
+}
+
 export function useRoomConnection(
   roomId: string,
   nick: string | null,
+  devices?: RoomConnectionDevices,
 ): UseRoomConnectionResult {
   const [state, setState] = useState<RoomConnectionState>(initialState);
   const connectionRef = useRef<RoomConnection | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: devices выбираются один раз на экране входа, до создания соединения — переподключение при их смене не нужно
   useEffect(() => {
     if (!nick) {
       return;
@@ -45,6 +52,8 @@ export function useRoomConnection(
       serverUrl: SERVER_URL,
       roomId,
       nick,
+      audioDeviceId: devices?.audioDeviceId,
+      videoDeviceId: devices?.videoDeviceId,
       onStateChange: setState,
     });
     connectionRef.current = connection;

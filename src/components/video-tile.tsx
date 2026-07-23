@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 
+import { useAudioOutput } from '@/hooks/use-audio-output';
 import { useIsSpeaking } from '@/hooks/use-is-speaking';
 import { colorForSeed } from '@/lib/color-for-seed';
 import type { Participant } from '@shared/room-connection';
@@ -13,6 +14,8 @@ export interface VideoTileProps {
   isPendingScreenShare?: boolean;
   size?: 'grid' | 'focused';
   showSpeakingIndicator?: boolean;
+  volume?: number;
+  outputDeviceId?: string;
   onClick?: () => void;
   onWatchClick?: () => void;
 }
@@ -25,12 +28,18 @@ export function VideoTile({
   isPendingScreenShare,
   size = 'grid',
   showSpeakingIndicator = true,
+  volume = 1,
+  outputDeviceId,
   onClick,
   onWatchClick,
 }: VideoTileProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const isSpeakingRaw = useIsSpeaking(isScreenShare ? null : stream);
   const isSpeaking = showSpeakingIndicator && isSpeakingRaw;
+  // Аудио у чужих плиток играет через Web Audio (GainNode) — так можно регулировать
+  // громкость лично для себя, не трогая ни сеть, ни то, что слышат другие.
+  // У своей плитки (muted) звук вообще не воспроизводим — не нужно слышать себя.
+  useAudioOutput(muted ? null : stream, volume, outputDeviceId);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -78,7 +87,7 @@ export function VideoTile({
       <video
         ref={videoRef}
         autoPlay
-        muted={muted}
+        muted
         playsInline
         className={`h-full w-full ${isScreenShare ? 'object-contain' : 'object-cover'} ${hasVideo ? '' : 'hidden'}`}
       />

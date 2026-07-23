@@ -1,10 +1,22 @@
 import type { Participant } from '@shared/room-connection';
-import { Crown, MicOff, UserX } from 'lucide-react';
+import { Crown } from 'lucide-react';
+import { ParticipantMenu } from './participant-menu';
+
+export interface VolumeSettings {
+  mic: number;
+  screen: number;
+}
 
 export interface ParticipantListProps {
   participants: Participant[];
   userId: string | null;
   isHost: boolean;
+  volumes: Record<string, VolumeSettings>;
+  onVolumeChange: (
+    targetUserId: string,
+    kind: 'mic' | 'screen',
+    value: number,
+  ) => void;
   onMuteParticipant: (targetUserId: string, forceMuted: boolean) => void;
   onKickParticipant: (targetUserId: string) => void;
 }
@@ -13,6 +25,8 @@ export function ParticipantList({
   participants,
   userId,
   isHost,
+  volumes,
+  onVolumeChange,
   onMuteParticipant,
   onKickParticipant,
 }: ParticipantListProps) {
@@ -20,6 +34,8 @@ export function ParticipantList({
     <ul className="flex flex-col gap-2">
       {participants.map(participant => {
         const isSelf = participant.id === userId;
+        const volume = volumes[participant.id] ?? { mic: 1, screen: 1 };
+
         return (
           <li
             key={participant.id}
@@ -32,27 +48,23 @@ export function ParticipantList({
               {participant.nick}
               {isSelf ? ' (вы)' : ''}
             </span>
-            {isHost && !isSelf && (
-              <span className="flex shrink-0 gap-1">
-                <button
-                  type="button"
-                  onClick={() =>
-                    onMuteParticipant(participant.id, !participant.forceMuted)
-                  }
-                  title={participant.forceMuted ? 'Снять мут' : 'Замутить'}
-                  className={`rounded p-1.5 hover:bg-neutral-600 ${participant.forceMuted ? 'text-red-400' : ''}`}
-                >
-                  <MicOff size={14} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onKickParticipant(participant.id)}
-                  title="Кикнуть"
-                  className="rounded p-1.5 hover:bg-neutral-600"
-                >
-                  <UserX size={14} />
-                </button>
-              </span>
+            {!isSelf && (
+              <ParticipantMenu
+                isHost={isHost}
+                forceMuted={participant.forceMuted}
+                micVolume={volume.mic}
+                screenVolume={volume.screen}
+                onMicVolumeChange={value =>
+                  onVolumeChange(participant.id, 'mic', value)
+                }
+                onScreenVolumeChange={value =>
+                  onVolumeChange(participant.id, 'screen', value)
+                }
+                onToggleMute={() =>
+                  onMuteParticipant(participant.id, !participant.forceMuted)
+                }
+                onKick={() => onKickParticipant(participant.id)}
+              />
             )}
           </li>
         );

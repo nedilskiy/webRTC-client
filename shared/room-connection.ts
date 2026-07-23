@@ -51,6 +51,8 @@ export interface RoomConnectionOptions {
   serverUrl: string;
   roomId: string;
   nick: string;
+  audioDeviceId?: string;
+  videoDeviceId?: string;
   onStateChange: (state: RoomConnectionState) => void;
 }
 
@@ -314,6 +316,7 @@ export class RoomConnection {
 
     this.socket.on('participants-updated', (data: Participant[]) => {
       this.setState({ participants: data });
+      this.syncForceMuted(data);
     });
 
     this.socket.on('chat:history', (data: ChatMessage[]) => {
@@ -331,6 +334,21 @@ export class RoomConnection {
     this.socket.on('kicked', () => {
       this.setState({ wasKicked: true });
     });
+  }
+
+  private syncForceMuted(participants: Participant[]): void {
+    const self = participants.find(
+      participant => participant.id === this.state.userId,
+    );
+    if (!self) {
+      return;
+    }
+    if (this.micTrack) {
+      this.micTrack.enabled = self.forceMuted ? false : self.micOn;
+    }
+    if (this.screenAudioTrack) {
+      this.screenAudioTrack.enabled = !self.forceMuted;
+    }
   }
 
   private handleProducerClosed(info: ProducerClosedInfo): void {
@@ -374,10 +392,19 @@ export class RoomConnection {
   }
 
   private async getLocalStream(): Promise<MediaStream> {
+    const audioConstraint: MediaTrackConstraints | boolean = this.options
+      .audioDeviceId
+      ? { deviceId: { exact: this.options.audioDeviceId } }
+      : true;
+    const videoConstraint: MediaTrackConstraints | boolean = this.options
+      .videoDeviceId
+      ? { deviceId: { exact: this.options.videoDeviceId } }
+      : true;
+
     try {
       return await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: true,
+        audio: audioConstraint,
+        video: videoConstraint,
       });
     } catch (error) {
       console.warn(
@@ -388,7 +415,7 @@ export class RoomConnection {
 
     try {
       return await navigator.mediaDevices.getUserMedia({
-        audio: true,
+        audio: audioConstraint,
         video: false,
       });
     } catch (error) {
@@ -401,7 +428,7 @@ export class RoomConnection {
     try {
       return await navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: true,
+        video: videoConstraint,
       });
     } catch (error) {
       console.warn(

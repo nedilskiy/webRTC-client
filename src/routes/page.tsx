@@ -1,8 +1,11 @@
 import { useNavigate } from '@modern-js/runtime/router';
 import { useState } from 'react';
 
+import { DeviceFields, type JoinDevices } from '@/components/device-fields';
+
 const JoinPage = () => {
   const [nick, setNick] = useState('');
+  const [devices, setDevices] = useState<JoinDevices>({});
 
   const navigate = useNavigate();
 
@@ -12,7 +15,7 @@ const JoinPage = () => {
       return;
     }
     const roomId = crypto.randomUUID();
-    navigate(`/room/${roomId}`, { state: { nick } });
+    navigate(`/room/${roomId}`, { state: { nick, devices } });
   };
 
   return (
@@ -28,6 +31,9 @@ const JoinPage = () => {
           placeholder="Ваш никнейм"
           className="rounded-lg bg-neutral-700 px-3 py-2 text-white outline-none focus:ring-2 focus:ring-blue-500"
         />
+
+        <DeviceFields value={devices} onChange={setDevices} />
+
         <button
           type="submit"
           className="rounded-lg bg-blue-600 px-3 py-2 font-medium text-white hover:bg-blue-500"

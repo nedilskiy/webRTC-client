@@ -2,11 +2,18 @@ import { useAutoHide } from '@/hooks/use-auto-hide';
 import { PanelRightOpen } from 'lucide-react';
 
 export interface OpenPanelButtonProps {
+  panelOpen: boolean;
+  hasUnread: boolean;
   onClick: () => void;
 }
 
-export function OpenPanelButton({ onClick }: OpenPanelButtonProps) {
-  const visible = useAutoHide();
+export function OpenPanelButton({
+  panelOpen,
+  hasUnread,
+  onClick,
+}: OpenPanelButtonProps) {
+  const idleVisible = useAutoHide();
+  const visible = idleVisible && !panelOpen;
 
   return (
     <button
@@ -17,6 +24,9 @@ export function OpenPanelButton({ onClick }: OpenPanelButtonProps) {
       }`}
     >
       <PanelRightOpen size={18} />
+      {hasUnread && (
+        <span className="absolute right-1 top-1 h-2.5 w-2.5 rounded-full bg-red-600" />
+      )}
     </button>
   );
 }

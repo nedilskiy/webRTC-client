@@ -1,24 +1,34 @@
 import { ControlsBar } from '@/components/controls-bar';
-import { JoinForm } from '@/components/join-form';
+import { type JoinDevices, JoinForm } from '@/components/join-form';
 import { OpenPanelButton } from '@/components/open-panel-button';
-import { SidePanel } from '@/components/side-panel';
+import type { VolumeSettings } from '@/components/participant-list';
+import { SidePanel, type SidePanelTab } from '@/components/side-panel';
 import { VideoTile } from '@/components/video-tile';
 import { useRoomConnection } from '@/hooks/use-room-connection';
+import type { ParticipantTile } from '@/hooks/use-room-view-model';
 import { useRoomViewModel } from '@/hooks/use-room-view-model';
 import { useLocation, useNavigate, useParams } from '@modern-js/runtime/router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const RoomPage = () => {
   const { roomId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
-  const initialNick =
-    (location.state as { nick?: string } | null)?.nick ?? null;
+  const locationState = location.state as {
+    nick?: string;
+    devices?: JoinDevices;
+  } | null;
+  const initialNick = locationState?.nick ?? null;
+  const initialDevices = locationState?.devices ?? null;
 
   const [nick, setNick] = useState<string | null>(initialNick);
+  const [devices, setDevices] = useState<JoinDevices | null>(initialDevices);
   const [copied, setCopied] = useState(false);
   const [isPanelOpen, setIsPanelOpen] = useState(true);
+  const [panelTab, setPanelTab] = useState<SidePanelTab>('participants');
+  const [unreadCount, setUnreadCount] = useState(0);
   const [focusedKey, setFocusedKey] = useState<string | null>(null);
+  const [volumes, setVolumes] = useState<Record<string, VolumeSettings>>({});
 
   const {
     userId,
@@ -39,13 +49,34 @@ const RoomPage = () => {
     kickParticipant,
     wasKicked,
     leave,
-  } = useRoomConnection(roomId as string, nick);
+  } = useRoomConnection(
+    roomId as string,
+    devices ? nick : null,
+    devices ?? undefined,
+  );
 
   useEffect(() => {
     if (wasKicked) {
       navigate('/');
     }
   }, [wasKicked, navigate]);
+
+  const isChatVisible = isPanelOpen && panelTab === 'chat';
+  const seenMessageCountRef = useRef(0);
+
+  useEffect(() => {
+    if (isChatVisible) {
+      seenMessageCountRef.current = chatMessages.length;
+      setUnreadCount(0);
+      return;
+    }
+
+    const newCount = chatMessages.length - seenMessageCountRef.current;
+    if (newCount > 0) {
+      seenMessageCountRef.current = chatMessages.length;
+      setUnreadCount(previous => previous + newCount);
+    }
+  }, [chatMessages.length, isChatVisible]);
 
   const tiles = useRoomViewModel(
     participants,
@@ -84,8 +115,37 @@ const RoomPage = () => {
     }
   };
 
-  if (!nick) {
-    return <JoinForm onSubmit={setNick} />;
+  const handleVolumeChange = (
+    targetUserId: string,
+    kind: 'mic' | 'screen',
+    value: number,
+  ) => {
+    setVolumes(previous => {
+      const current = previous[targetUserId] ?? { mic: 1, screen: 1 };
+      return {
+        ...previous,
+        [targetUserId]: { ...current, [kind]: value },
+      };
+    });
+  };
+
+  const getTileVolume = (tile: ParticipantTile): number => {
+    const setting = volumes[tile.participant.id];
+    if (!setting) {
+      return 1;
+    }
+    return tile.isScreenShare ? setting.screen : setting.mic;
+  };
+
+  if (!nick || !devices) {
+    return (
+      <JoinForm
+        onSubmit={(submittedNick, submittedDevices) => {
+          setNick(submittedNick);
+          setDevices(submittedDevices);
+        }}
+      />
+    );
   }
 
   return (
@@ -103,6 +163,8 @@ const RoomPage = () => {
                 isPendingScreenShare={focusedTile.isPendingScreenShare}
                 size="focused"
                 showSpeakingIndicator={false}
+                volume={getTileVolume(focusedTile)}
+                outputDeviceId={devices?.audioOutputDeviceId}
                 onClick={() => setFocusedKey(null)}
                 onWatchClick={() =>
                   watchScreenShare(focusedTile.participant.id)
@@ -118,6 +180,8 @@ const RoomPage = () => {
                     muted={tile.isSelf}
                     isScreenShare={tile.isScreenShare}
                     isPendingScreenShare={tile.isPendingScreenShare}
+                    volume={getTileVolume(tile)}
+                    outputDeviceId={devices?.audioOutputDeviceId}
                     onClick={() => setFocusedKey(tile.key)}
                     onWatchClick={() => watchScreenShare(tile.participant.id)}
                   />
@@ -126,7 +190,7 @@ const RoomPage = () => {
             </div>
           </div>
         ) : (
-          <div className="grid min-h-0 flex-1 auto-rows-max grid-cols-[repeat(auto-fit,minmax(200px,280px))] justify-center gap-4 overflow-y-auto pb-28">
+          <div className="pt-2 grid min-h-0 flex-1 auto-rows-max grid-cols-[repeat(auto-fit,minmax(200px,280px))] justify-center gap-4 overflow-y-auto pb-28">
             {tiles.map(tile => (
               <VideoTile
                 key={tile.key}
@@ -135,6 +199,8 @@ const RoomPage = () => {
                 muted={tile.isSelf}
                 isScreenShare={tile.isScreenShare}
                 isPendingScreenShare={tile.isPendingScreenShare}
+                volume={getTileVolume(tile)}
+                outputDeviceId={devices?.audioOutputDeviceId}
                 onClick={() => setFocusedKey(tile.key)}
                 onWatchClick={() => watchScreenShare(tile.participant.id)}
               />
@@ -156,7 +222,11 @@ const RoomPage = () => {
         />
       </div>
 
-      {isPanelOpen ? (
+      <div
+        className={`overflow-hidden border-neutral-800 transition-[width] duration-300 ease-in-out ${
+          isPanelOpen ? 'w-72 border-l' : 'w-0'
+        }`}
+      >
         <SidePanel
           participants={participants}
           userId={userId}
@@ -166,12 +236,20 @@ const RoomPage = () => {
           isHost={isHost}
           onInvite={handleInvite}
           inviteCopied={copied}
+          tab={panelTab}
+          onTabChange={setPanelTab}
+          unreadCount={unreadCount}
+          volumes={volumes}
+          onVolumeChange={handleVolumeChange}
           onMuteParticipant={muteParticipant}
           onKickParticipant={kickParticipant}
         />
-      ) : (
-        <OpenPanelButton onClick={() => setIsPanelOpen(true)} />
-      )}
+      </div>
+      <OpenPanelButton
+        panelOpen={isPanelOpen}
+        hasUnread={unreadCount > 0}
+        onClick={() => setIsPanelOpen(true)}
+      />
     </div>
   );
 };
